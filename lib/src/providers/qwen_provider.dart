@@ -33,61 +33,65 @@ class QwenProvider extends BaseOcrProvider {
       final systemPromptValue = systemPrompt ?? getDefaultSystemPrompt();
       final userPromptValue = userPrompt ?? getDefaultUserPrompt();
 
-      final response = await http.post(
-        Uri.parse(apiEndpoint),
-        headers: {
-          'Authorization': 'Bearer $apiKey',
-          'Content-Type': 'application/json',
-          'X-DashScope-Async': 'enable',
-        },
-        body: jsonEncode({
-          'model': 'qwen-vl-plus',
-          'messages': [
-            {
-              'role': 'system',
-              'content': systemPromptValue,
-            },
-            {
-              'role': 'user',
-              'content': [
-                {
-                  'type': 'image',
-                  'image': 'data:image/jpeg;base64,$base64Image',
-                },
-                {
-                  'type': 'text',
-                  'text': userPromptValue,
-                },
-              ],
-            },
-          ],
-          'temperature': 0.1,
-          'top_p': 0.7,
-        }),
-        timeout: const Duration(seconds: 30),
-      );
+      final client = http.Client();
+      try {
+        final response = await client.post(
+          Uri.parse(apiEndpoint),
+          headers: {
+            'Authorization': 'Bearer $apiKey',
+            'Content-Type': 'application/json',
+            'X-DashScope-Async': 'enable',
+          },
+          body: jsonEncode({
+            'model': 'qwen-vl-plus',
+            'messages': [
+              {
+                'role': 'system',
+                'content': systemPromptValue,
+              },
+              {
+                'role': 'user',
+                'content': [
+                  {
+                    'type': 'image',
+                    'image': 'data:image/jpeg;base64,$base64Image',
+                  },
+                  {
+                    'type': 'text',
+                    'text': userPromptValue,
+                  },
+                ],
+              },
+            ],
+            'temperature': 0.1,
+            'top_p': 0.7,
+          }),
+        ).timeout(const Duration(seconds: 30));
 
-      if (response.statusCode != 200) {
-        throw InferenceException(
-          'Qwen API request failed',
-          response.body,
-          response.statusCode,
-        );
+        if (response.statusCode != 200) {
+          throw InferenceException(
+            'Qwen API request failed',
+            response.body,
+            response.statusCode,
+          );
+        }
+
+        final jsonResponse = jsonDecode(response.body) as Map<String, dynamic>;
+        final output = jsonResponse['output'] as Map<String, dynamic>?;
+        if (output == null) {
+          throw InferenceException('Invalid response structure from Qwen API', null, response.statusCode);
+        }
+
+        final choices = output['choices'] as List?;
+        if (choices == null || choices.isEmpty) {
+          throw InferenceException('No choices in Qwen response', null, response.statusCode);
+        }
+
+        final message = choices[0] as Map<String, dynamic>;
+        return message['message']['content'] as String? ?? '';
+      } finally {
+        client.close();
       }
-
-      final jsonResponse = jsonDecode(response.body) as Map<String, dynamic>;
-      final output = jsonResponse['output'] as Map<String, dynamic>?;
-      if (output == null) {
-        throw InferenceException('Invalid response structure from Qwen API', null, response.statusCode);
-      }
-
-      final choices = output['choices'] as List?;
-      if (choices == null || choices.isEmpty) {
-        throw InferenceException('No choices in Qwen response', null, response.statusCode);
-      }
-
-      final message = choices[0] as Map<String, dynamic>;
-      return message['message']['content'] as String? ?? '';
     } catch (e) {
       if (e is InferenceException) {
         rethrow;
