@@ -18,36 +18,22 @@ class GLMOCRParser implements ReceiptParser {
     Map<String, dynamic>? metadata,
   }) async {
     try {
-      // Parse the GLM-OCR response
-      Map<String, dynamic> glmResponse;
+      // Parse the GLM-OCR response - handle both markdown string and JSON formats
+      String mdResults = '';
+
+      // Try to parse as JSON first (for structured response)
       try {
-        glmResponse = jsonDecode(rawOutput) as Map<String, dynamic>;
+        final glmResponse = jsonDecode(rawOutput) as Map<String, dynamic>;
+        mdResults = glmResponse['md_results'] as String? ?? '';
       } catch (e) {
-        throw ParsingException('Failed to parse GLM-OCR JSON response', e, rawOutput);
+        // If JSON parsing fails, treat rawOutput as markdown text directly
+        mdResults = rawOutput;
       }
 
-      final mdResults = glmResponse['md_results'] as String? ?? '';
-      final layoutDetails = (glmResponse['layout_details'] as List?)?.cast<List>() ?? [];
+      final layoutDetails = <List>[];
 
-      // Extract text content from layout details
-      final textElements = <String>[];
-      for (final layout in layoutDetails) {
-        if (layout is List && layout.isNotEmpty) {
-          for (final element in layout) {
-            if (element is Map<String, dynamic>) {
-              final label = element['label'] as String? ?? '';
-              final content = element['content'] as String? ?? '';
-
-              if (label == 'text' && content.isNotEmpty) {
-                textElements.add(content);
-              }
-            }
-          }
-        }
-      }
-
-      // Combine markdown results and extracted text
-      final fullText = '$mdResults\n${textElements.join('\n')}';
+      // Use markdown results as the full text
+      final fullText = mdResults;
 
       // Extract merchant info
       final merchant = _extractMerchantInfo(fullText);
@@ -68,9 +54,6 @@ class GLMOCRParser implements ReceiptParser {
         modelUsed: 'glm-ocr',
         additionalData: {
           ...?metadata,
-          'glm_response_id': glmResponse['id'],
-          'num_pages': glmResponse['data_info']?['num_pages'],
-          'usage': glmResponse['usage'],
         },
       );
 

@@ -208,33 +208,65 @@ class FreeformParser implements ReceiptParser {
     double serviceCharge = 0;
     double grandTotal = 0;
 
-    // Extract subtotal
-    final subtotalMatch = RegExp(r'(?:subtotal|sub total|total before)[:\s]+\$?(\d+(?:\.\d{2})?)', caseSensitive: false)
+    // Helper to parse numbers with various formats (1,234.56 or 1.234,56 or 1234)
+    double _parseNumber(String numStr) {
+      final cleaned = numStr.trim();
+      // Remove currency symbols and spaces
+      String normalized = cleaned.replaceAll(RegExp(r'[Rp€$£₹\s]'), '');
+
+      // Handle different decimal separators
+      // If there's a comma and period, determine which is decimal
+      if (normalized.contains(',') && normalized.contains('.')) {
+        final lastCommaIdx = normalized.lastIndexOf(',');
+        final lastPeriodIdx = normalized.lastIndexOf('.');
+        if (lastCommaIdx > lastPeriodIdx) {
+          // Comma is decimal separator (European format: 1.234,56)
+          normalized = normalized.replaceAll('.', '').replaceAll(',', '.');
+        } else {
+          // Period is decimal separator (US format: 1,234.56)
+          normalized = normalized.replaceAll(',', '');
+        }
+      } else if (normalized.contains(',')) {
+        // Only comma - could be thousands or decimal
+        // Assume decimal if 2 digits after comma
+        final parts = normalized.split(',');
+        if (parts.last.length == 2) {
+          normalized = normalized.replaceAll(',', '.');
+        } else {
+          normalized = normalized.replaceAll(',', '');
+        }
+      }
+
+      return double.tryParse(normalized) ?? 0;
+    }
+
+    // Extract subtotal with more flexible currency/format handling
+    final subtotalMatch = RegExp(r'(?:subtotal|sub[\s-]?total|total before)[:\s]+([^,\n]+)', caseSensitive: false)
         .firstMatch(text);
     if (subtotalMatch != null) {
-      subtotal = double.tryParse(subtotalMatch.group(1)!) ?? 0;
+      subtotal = _parseNumber(subtotalMatch.group(1)!);
     }
 
     // Extract tax
-    final taxMatch = RegExp(r'(?:tax|sales tax)[:\s]+\$?(\d+(?:\.\d{2})?)', caseSensitive: false)
+    final taxMatch = RegExp(r'(?:tax|sales[\s-]?tax)[:\s]+([^,\n]+)', caseSensitive: false)
         .firstMatch(text);
     if (taxMatch != null) {
-      tax = double.tryParse(taxMatch.group(1)!) ?? 0;
+      tax = _parseNumber(taxMatch.group(1)!);
     }
 
     // Extract service charge
-    final serviceMatch = RegExp(r'(?:service charge|tip|gratuity)[:\s]+\$?(\d+(?:\.\d{2})?)', caseSensitive: false)
+    final serviceMatch = RegExp(r'(?:service[\s-]?charge|tip|gratuity)[:\s]+([^,\n]+)', caseSensitive: false)
         .firstMatch(text);
     if (serviceMatch != null) {
-      serviceCharge = double.tryParse(serviceMatch.group(1)!) ?? 0;
+      serviceCharge = _parseNumber(serviceMatch.group(1)!);
     }
 
     // Extract grand total (prefer "Total" or "Grand Total")
-    final totalMatch = RegExp(r'(?:grand total|total|amount due)[:\s]+\$?(\d+(?:\.\d{2})?)', caseSensitive: false)
+    final totalMatches = RegExp(r'(?:grand[\s-]?total|total|amount[\s-]?due)[:\s]+([^,\n]+)', caseSensitive: false)
         .allMatches(text);
-    if (totalMatch.isNotEmpty) {
+    if (totalMatches.isNotEmpty) {
       // Use the last match (usually the grand total)
-      grandTotal = double.tryParse(totalMatch.last.group(1)!) ?? 0;
+      grandTotal = _parseNumber(totalMatches.last.group(1)!);
     }
 
     // Calculate subtotal if not found
@@ -256,7 +288,7 @@ class FreeformParser implements ReceiptParser {
         'subtotal': subtotalMatch != null ? 75 : 50,
         'tax': taxMatch != null ? 75 : 50,
         if (serviceCharge > 0) 'serviceCharge': serviceMatch != null ? 70 : 40,
-        'grandTotal': totalMatch.isNotEmpty ? 80 : 50,
+        'grandTotal': totalMatches.isNotEmpty ? 80 : 50,
       },
     );
   }
