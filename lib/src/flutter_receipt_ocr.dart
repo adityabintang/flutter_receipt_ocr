@@ -1,3 +1,4 @@
+import '../flutter_ocr_receipt_platform_interface.dart';
 import 'exceptions/ocr_exception.dart';
 import 'models/receipt_data.dart';
 import 'parsers/freeform_parser.dart';
@@ -164,5 +165,13 @@ class FlutterReceiptOcr {
     } catch (e) {
       return false;
     }
+  }
+
+  /// Get the platform version (backward compatibility method).
+  ///
+  /// This method is maintained for backward compatibility with the original plugin interface.
+  /// In a real application, you would use the receipt OCR methods instead.
+  Future<String?> getPlatformVersion() async {
+    return FlutterReceiptOcrPlatform.instance.getPlatformVersion();
   }
 }
