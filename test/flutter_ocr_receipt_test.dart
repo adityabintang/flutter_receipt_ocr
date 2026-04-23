@@ -24,6 +24,6 @@ void main() {
     MockFlutterOcrReceiptPlatform fakePlatform = MockFlutterOcrReceiptPlatform();
     FlutterOcrReceiptPlatform.instance = fakePlatform;
 
-    // expect(await flutterOcrReceiptPlugin.getPlatformVersion(), '42');
+    expect(await flutterOcrReceiptPlugin.getPlatformVersion(), '42');
   });
 }
