@@ -33,56 +33,60 @@ class GLMProvider extends BaseOcrProvider {
       final systemPromptValue = systemPrompt ?? getDefaultSystemPrompt();
       final userPromptValue = userPrompt ?? getDefaultUserPrompt();
 
-      final response = await http.post(
-        Uri.parse(apiEndpoint),
-        headers: {
-          'Authorization': 'Bearer $apiKey',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'model': 'glm-4v',
-          'messages': [
-            {
-              'role': 'system',
-              'content': systemPromptValue,
-            },
-            {
-              'role': 'user',
-              'content': [
-                {
-                  'type': 'image_url',
-                  'image_url': {
-                    'url': 'data:image/jpeg;base64,$base64Image',
+      final client = http.Client();
+      try {
+        final response = await client.post(
+          Uri.parse(apiEndpoint),
+          headers: {
+            'Authorization': 'Bearer $apiKey',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({
+            'model': 'glm-4v',
+            'messages': [
+              {
+                'role': 'system',
+                'content': systemPromptValue,
+              },
+              {
+                'role': 'user',
+                'content': [
+                  {
+                    'type': 'image_url',
+                    'image_url': {
+                      'url': 'data:image/jpeg;base64,$base64Image',
+                    },
                   },
-                },
-                {
-                  'type': 'text',
-                  'text': userPromptValue,
-                },
-              ],
-            },
-          ],
-          'temperature': 0.1,
-          'top_p': 0.7,
-        }),
-        timeout: const Duration(seconds: 30),
-      );
+                  {
+                    'type': 'text',
+                    'text': userPromptValue,
+                  },
+                ],
+              },
+            ],
+            'temperature': 0.1,
+            'top_p': 0.7,
+          }),
+        ).timeout(const Duration(seconds: 30));
 
-      if (response.statusCode != 200) {
-        throw InferenceException(
-          'GLM API request failed',
-          response.body,
-          response.statusCode,
-        );
+        if (response.statusCode != 200) {
+          throw InferenceException(
+            'GLM API request failed',
+            response.body,
+            response.statusCode,
+          );
+        }
+
+        final jsonResponse = jsonDecode(response.body) as Map<String, dynamic>;
+        final message = (jsonResponse['choices'] as List?)?[0];
+        if (message == null) {
+          throw InferenceException('Invalid response structure from GLM API', null, response.statusCode);
+        }
+
+        return message['message']['content'] as String? ?? '';
+      } finally {
+        client.close();
       }
-
-      final jsonResponse = jsonDecode(response.body) as Map<String, dynamic>;
-      final message = (jsonResponse['choices'] as List?)?[0];
-      if (message == null) {
-        throw InferenceException('Invalid response structure from GLM API', null, response.statusCode);
-      }
-
-      return message['message']['content'] as String? ?? '';
     } catch (e) {
       if (e is InferenceException) {
         rethrow;

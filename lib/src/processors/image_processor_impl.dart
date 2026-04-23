@@ -14,7 +14,7 @@ class ImageProcessorImpl implements ImageProcessor {
     int quality = 85,
   }) async {
     try {
-      final image = img.decodeImage(imageData);
+      final image = img.decodeImage(Uint8List.fromList(imageData));
       if (image == null) {
         throw ImageProcessingException('Failed to decode image');
       }
@@ -43,7 +43,7 @@ class ImageProcessorImpl implements ImageProcessor {
     int height,
   ) async {
     try {
-      final image = img.decodeImage(imageData);
+      final image = img.decodeImage(Uint8List.fromList(imageData));
       if (image == null) {
         throw ImageProcessingException('Failed to decode image');
       }
@@ -61,7 +61,7 @@ class ImageProcessorImpl implements ImageProcessor {
     int quality = 85,
   }) async {
     try {
-      final image = img.decodeImage(jpgData);
+      final image = img.decodeImage(Uint8List.fromList(jpgData));
       if (image == null) {
         throw ImageProcessingException('Failed to decode image');
       }
@@ -79,7 +79,7 @@ class ImageProcessorImpl implements ImageProcessor {
   @override
   Future<Map<String, dynamic>> analyzeImage(List<int> imageData) async {
     try {
-      final image = img.decodeImage(imageData);
+      final image = img.decodeImage(Uint8List.fromList(imageData));
       if (image == null) {
         throw ImageProcessingException('Failed to decode image');
       }

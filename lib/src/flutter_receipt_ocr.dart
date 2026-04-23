@@ -124,7 +124,7 @@ class FlutterReceiptOcr {
       if (e is OcrException) {
         rethrow;
       }
-      throw OcrException('Receipt recognition failed', e);
+      throw InferenceException('Receipt recognition failed', e);
     }
   }
 

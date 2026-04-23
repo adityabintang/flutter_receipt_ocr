@@ -110,7 +110,7 @@ class ReceiptMetadata {
   final String rawLlmOutput;
 
   /// Processing time in milliseconds.
-  final int processingTimeMs;
+  int processingTimeMs;
 
   /// Model/provider used for OCR.
   final String modelUsed;
@@ -120,10 +120,10 @@ class ReceiptMetadata {
 
   ReceiptMetadata({
     required this.rawLlmOutput,
-    required this.processingTimeMs,
+    required int processingTimeMs,
     required this.modelUsed,
     this.additionalData,
-  });
+  }) : processingTimeMs = processingTimeMs;
 
   /// Convert to JSON.
   Map<String, dynamic> toJson() => {
