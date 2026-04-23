@@ -20,7 +20,7 @@ void main() {
   });
 
   test('getPlatformVersion', () async {
-    FlutterOcrReceipt flutterOcrReceiptPlugin = FlutterOcrReceipt();
+    FlutterReceiptOcr flutterOcrReceiptPlugin = FlutterReceiptOcr(provider: GLMProvider(apiKey: '70e748efaed04e04aeaab363b4c2c42b.t7AmLXGmeUIwzGA5'));
     MockFlutterOcrReceiptPlatform fakePlatform = MockFlutterOcrReceiptPlatform();
     FlutterOcrReceiptPlatform.instance = fakePlatform;
 

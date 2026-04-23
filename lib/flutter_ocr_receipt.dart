@@ -1,8 +1,18 @@
-
-import 'flutter_ocr_receipt_platform_interface.dart';
-
-class FlutterOcrReceipt {
-  Future<String?> getPlatformVersion() {
-    return FlutterOcrReceiptPlatform.instance.getPlatformVersion();
-  }
-}
+export 'src/flutter_receipt_ocr.dart';
+export 'src/models/receipt_data.dart';
+export 'src/models/merchant_info.dart';
+export 'src/models/transaction_info.dart';
+export 'src/models/item_line.dart';
+export 'src/models/summary_info.dart';
+export 'src/models/confidence_score.dart';
+export 'src/exceptions/ocr_exception.dart';
+export 'src/providers/base_ocr_provider.dart';
+export 'src/providers/mock_provider.dart';
+export 'src/providers/glm_provider.dart';
+export 'src/providers/qwen_provider.dart';
+export 'src/processors/image_processor.dart';
+export 'src/processors/image_processor_impl.dart';
+export 'src/parsers/receipt_parser.dart';
+export 'src/parsers/structured_parser.dart';
+export 'src/parsers/freeform_parser.dart';
+export 'src/parsers/glm_ocr_parser.dart';

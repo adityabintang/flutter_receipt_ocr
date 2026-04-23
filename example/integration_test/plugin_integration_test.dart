@@ -16,7 +16,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('getPlatformVersion test', (WidgetTester tester) async {
-    final FlutterOcrReceipt plugin = FlutterOcrReceipt();
+    final FlutterReceiptOcr plugin = FlutterReceiptOcr(provider: GLMProvider(apiKey: '70e748efaed04e04aeaab363b4c2c42b.t7AmLXGmeUIwzGA5'));
     final String? version = await plugin.getPlatformVersion();
     // The version string depends on the host platform running the test, so
     // just assert that some non-empty string is returned.
