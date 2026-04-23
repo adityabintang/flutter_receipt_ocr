@@ -233,40 +233,119 @@ class GLMOCRParser implements ReceiptParser {
     double serviceCharge = 0;
     double grandTotal = 0;
 
-    // Extract subtotal
-    final subtotalMatch = RegExp(
-      r'(?:subtotal|sub[\s-]?total|total before)[:\s]+\$?(\d+(?:\.\d{2})?)',
-      caseSensitive: false,
-    ).firstMatch(text);
-    if (subtotalMatch != null) {
-      subtotal = double.tryParse(subtotalMatch.group(1)!) ?? 0;
+    bool foundSubtotal = false;
+    bool foundTax = false;
+    bool foundService = false;
+    bool foundTotal = false;
+
+    double parseNumber(String numStr) {
+      String normalized = numStr.trim().replaceAll(RegExp(r'[Rp€\$£₹\s]', caseSensitive: false), '');
+
+      if (normalized.contains(',') && normalized.contains('.')) {
+        final lastCommaIdx = normalized.lastIndexOf(',');
+        final lastPeriodIdx = normalized.lastIndexOf('.');
+        if (lastCommaIdx > lastPeriodIdx) {
+          normalized = normalized.replaceAll('.', '').replaceAll(',', '.');
+        } else {
+          normalized = normalized.replaceAll(',', '');
+        }
+      } else if (normalized.contains(',')) {
+        final parts = normalized.split(',');
+        if (parts.length == 2 && parts.last.length == 2) {
+          normalized = normalized.replaceAll(',', '.');
+        } else {
+          normalized = normalized.replaceAll(',', '');
+        }
+      }
+
+      return double.tryParse(normalized) ?? 0;
     }
 
-    // Extract tax
-    final taxMatch = RegExp(
-      r'(?:tax|sales[\s-]?tax)[:\s]+\$?(\d+(?:\.\d{2})?)',
-      caseSensitive: false,
-    ).firstMatch(text);
-    if (taxMatch != null) {
-      tax = double.tryParse(taxMatch.group(1)!) ?? 0;
+    double? extractLastNumber(String line) {
+      final numberPattern = RegExp(r'\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?');
+      final matches = numberPattern.allMatches(line).toList();
+      if (matches.isEmpty) return null;
+      final value = parseNumber(matches.last.group(0)!);
+      return value > 0 ? value : null;
     }
 
-    // Extract service charge
-    final serviceMatch = RegExp(
-      r'(?:service[\s-]?charge|tip|gratuity)[:\s]+\$?(\d+(?:\.\d{2})?)',
-      caseSensitive: false,
-    ).firstMatch(text);
-    if (serviceMatch != null) {
-      serviceCharge = double.tryParse(serviceMatch.group(1)!) ?? 0;
+    final lines = text.split('\n');
+
+    for (final line in lines) {
+      final lower = line.toLowerCase().trim();
+      if (lower.isEmpty) continue;
+
+      if (!foundSubtotal &&
+          (lower.contains('subtotal') ||
+              lower.contains('sub total') ||
+              lower.contains('sub-total') ||
+              lower.contains('total before'))) {
+        final value = extractLastNumber(line);
+        if (value != null) {
+          subtotal = value;
+          foundSubtotal = true;
+        }
+        continue;
+      }
+
+      if (!foundTax &&
+          (lower.contains('sales tax') ||
+              RegExp(r'\btax\b').hasMatch(lower) ||
+              RegExp(r'\bppn\b').hasMatch(lower) ||
+              RegExp(r'\bpajak\b').hasMatch(lower))) {
+        final value = extractLastNumber(line);
+        if (value != null) {
+          tax = value;
+          foundTax = true;
+        }
+        continue;
+      }
+
+      if (!foundService &&
+          (lower.contains('service charge') ||
+              lower.contains('service-charge') ||
+              lower.contains('gratuity') ||
+              lower.contains('biaya layanan') ||
+              RegExp(r'\btip\b').hasMatch(lower))) {
+        final value = extractLastNumber(line);
+        if (value != null) {
+          serviceCharge = value;
+          foundService = true;
+        }
+        continue;
+      }
+
+      final isExplicitTotal = lower.contains('grand total') ||
+          lower.contains('total harga') ||
+          lower.contains('total bayar') ||
+          lower.contains('jumlah bayar') ||
+          lower.contains('amount due') ||
+          lower.contains('total due');
+      final isGenericTotal = RegExp(r'\btotal\b').hasMatch(lower) &&
+          !lower.contains('subtotal') &&
+          !lower.contains('sub total');
+
+      if (isExplicitTotal || (isGenericTotal && !foundTotal)) {
+        final value = extractLastNumber(line);
+        if (value != null) {
+          if (isExplicitTotal || value > grandTotal) {
+            grandTotal = value;
+            foundTotal = true;
+          }
+        }
+      }
     }
 
-    // Extract grand total
-    final totalMatches = RegExp(
-      r'(?:grand[\s-]?total|total|amount[\s-]?due)[:\s]+\$?(\d+(?:\.\d{2})?)',
-      caseSensitive: false,
-    ).allMatches(text);
-    if (totalMatches.isNotEmpty) {
-      grandTotal = double.tryParse(totalMatches.last.group(1)!) ?? 0;
+    // Fallback: use largest currency-tagged number if grand total not found
+    if (!foundTotal) {
+      for (final line in lines) {
+        if (RegExp(r'Rp\.?|[\$€£₹]', caseSensitive: false).hasMatch(line)) {
+          final value = extractLastNumber(line);
+          if (value != null && value > grandTotal) {
+            grandTotal = value;
+          }
+        }
+      }
     }
 
     // Calculate if needed
@@ -283,10 +362,10 @@ class GLMOCRParser implements ReceiptParser {
       serviceCharge: serviceCharge > 0 ? serviceCharge : null,
       grandTotal: grandTotal,
       confidenceScores: {
-        'subtotal': subtotalMatch != null ? 85 : 50,
-        'tax': taxMatch != null ? 85 : 50,
-        if (serviceCharge > 0) 'serviceCharge': serviceMatch != null ? 80 : 40,
-        'grandTotal': totalMatches.isNotEmpty ? 90 : 50,
+        'subtotal': foundSubtotal ? 85 : 50,
+        'tax': foundTax ? 85 : 50,
+        if (serviceCharge > 0) 'serviceCharge': foundService ? 80 : 40,
+        'grandTotal': foundTotal ? 90 : (grandTotal > 0 ? 60 : 50),
       },
     );
   }

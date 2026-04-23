@@ -2,11 +2,13 @@ import '../flutter_ocr_receipt_platform_interface.dart';
 import 'exceptions/ocr_exception.dart';
 import 'models/receipt_data.dart';
 import 'parsers/freeform_parser.dart';
+import 'parsers/glm_ocr_parser.dart';
 import 'parsers/receipt_parser.dart';
 import 'parsers/structured_parser.dart';
 import 'processors/image_processor.dart';
 import 'processors/image_processor_impl.dart';
 import 'providers/base_ocr_provider.dart';
+import 'providers/glm_provider.dart';
 import 'providers/mock_provider.dart';
 
 /// Main entry point for the Flutter Receipt OCR package.
@@ -49,6 +51,30 @@ class FlutterReceiptOcr {
       provider: MockProvider(),
       imageProcessor: imageProcessor,
       parser: parser,
+    );
+  }
+
+  /// Create a FlutterReceiptOcr instance configured for Zhipu AI GLM-OCR.
+  ///
+  /// Uses GLMOCRParser as the primary parser (handles markdown output) and
+  /// FreeformParser as fallback. Get your API key from https://z.ai
+  ///
+  /// [apiKey] - Your GLM-OCR API key
+  /// [apiEndpoint] - Optional custom endpoint (defaults to official Zhipu AI)
+  /// [imageProcessor] - Optional custom image processor
+  factory FlutterReceiptOcr.glm({
+    required String apiKey,
+    String? apiEndpoint,
+    ImageProcessor? imageProcessor,
+  }) {
+    return FlutterReceiptOcr(
+      provider: GLMProvider(
+        apiKey: apiKey,
+        apiEndpoint: apiEndpoint ?? 'https://api.z.ai/api/paas/v4/layout_parsing',
+      ),
+      imageProcessor: imageProcessor,
+      parser: GLMOCRParser(),
+      fallbackParser: FreeformParser(),
     );
   }
 

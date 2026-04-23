@@ -15,3 +15,4 @@ export 'src/processors/image_processor_impl.dart';
 export 'src/parsers/receipt_parser.dart';
 export 'src/parsers/structured_parser.dart';
 export 'src/parsers/freeform_parser.dart';
+export 'src/parsers/glm_ocr_parser.dart';

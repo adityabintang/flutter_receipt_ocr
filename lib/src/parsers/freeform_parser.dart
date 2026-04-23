@@ -208,29 +208,30 @@ class FreeformParser implements ReceiptParser {
     double serviceCharge = 0;
     double grandTotal = 0;
 
-    // Helper to parse numbers with various formats (1,234.56 or 1.234,56 or 1234)
-    double _parseNumber(String numStr) {
-      final cleaned = numStr.trim();
-      // Remove currency symbols and spaces
-      String normalized = cleaned.replaceAll(RegExp(r'[Rp€$£₹\s]'), '');
+    bool foundSubtotal = false;
+    bool foundTax = false;
+    bool foundService = false;
+    bool foundTotal = false;
+
+    // Helper to parse numbers with various international formats
+    double parseNumber(String numStr) {
+      String normalized = numStr.trim().replaceAll(RegExp(r'[Rp€\$£₹\s]', caseSensitive: false), '');
 
       // Handle different decimal separators
-      // If there's a comma and period, determine which is decimal
       if (normalized.contains(',') && normalized.contains('.')) {
         final lastCommaIdx = normalized.lastIndexOf(',');
         final lastPeriodIdx = normalized.lastIndexOf('.');
         if (lastCommaIdx > lastPeriodIdx) {
-          // Comma is decimal separator (European format: 1.234,56)
+          // European format: 1.234,56
           normalized = normalized.replaceAll('.', '').replaceAll(',', '.');
         } else {
-          // Period is decimal separator (US format: 1,234.56)
+          // US format: 1,234.56
           normalized = normalized.replaceAll(',', '');
         }
       } else if (normalized.contains(',')) {
-        // Only comma - could be thousands or decimal
-        // Assume decimal if 2 digits after comma
         final parts = normalized.split(',');
-        if (parts.last.length == 2) {
+        // Decimal if exactly 2 digits after single comma
+        if (parts.length == 2 && parts.last.length == 2) {
           normalized = normalized.replaceAll(',', '.');
         } else {
           normalized = normalized.replaceAll(',', '');
@@ -240,33 +241,97 @@ class FreeformParser implements ReceiptParser {
       return double.tryParse(normalized) ?? 0;
     }
 
-    // Extract subtotal with more flexible currency/format handling
-    final subtotalMatch = RegExp(r'(?:subtotal|sub[\s-]?total|total before)[:\s]+([^,\n]+)', caseSensitive: false)
-        .firstMatch(text);
-    if (subtotalMatch != null) {
-      subtotal = _parseNumber(subtotalMatch.group(1)!);
+    // Extract last number from a line (handles formats like "256,680" or "1,234.56" or "20.87")
+    double? extractLastNumber(String line) {
+      final numberPattern = RegExp(r'\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?');
+      final matches = numberPattern.allMatches(line).toList();
+      if (matches.isEmpty) return null;
+      final value = parseNumber(matches.last.group(0)!);
+      return value > 0 ? value : null;
     }
 
-    // Extract tax
-    final taxMatch = RegExp(r'(?:tax|sales[\s-]?tax)[:\s]+([^,\n]+)', caseSensitive: false)
-        .firstMatch(text);
-    if (taxMatch != null) {
-      tax = _parseNumber(taxMatch.group(1)!);
+    final lines = text.split('\n');
+
+    for (final line in lines) {
+      final lower = line.toLowerCase().trim();
+      if (lower.isEmpty) continue;
+
+      // Subtotal (check before total to avoid "subtotal" matching "total")
+      if (!foundSubtotal &&
+          (lower.contains('subtotal') ||
+              lower.contains('sub total') ||
+              lower.contains('sub-total') ||
+              lower.contains('total before'))) {
+        final value = extractLastNumber(line);
+        if (value != null) {
+          subtotal = value;
+          foundSubtotal = true;
+        }
+        continue;
+      }
+
+      // Tax (PPN = Indonesian VAT, Pajak = Indonesian tax)
+      if (!foundTax &&
+          (lower.contains('sales tax') ||
+              RegExp(r'\btax\b').hasMatch(lower) ||
+              RegExp(r'\bppn\b').hasMatch(lower) ||
+              RegExp(r'\bpajak\b').hasMatch(lower))) {
+        final value = extractLastNumber(line);
+        if (value != null) {
+          tax = value;
+          foundTax = true;
+        }
+        continue;
+      }
+
+      // Service charge (biaya layanan = Indonesian service fee)
+      if (!foundService &&
+          (lower.contains('service charge') ||
+              lower.contains('service-charge') ||
+              lower.contains('gratuity') ||
+              lower.contains('biaya layanan') ||
+              RegExp(r'\btip\b').hasMatch(lower))) {
+        final value = extractLastNumber(line);
+        if (value != null) {
+          serviceCharge = value;
+          foundService = true;
+        }
+        continue;
+      }
+
+      // Grand total (prioritize explicit grand total keywords)
+      final isExplicitTotal = lower.contains('grand total') ||
+          lower.contains('total harga') || // Indonesian: total price
+          lower.contains('total bayar') || // Indonesian: total to pay
+          lower.contains('jumlah bayar') || // Indonesian: amount to pay
+          lower.contains('amount due') ||
+          lower.contains('total due');
+      final isGenericTotal = RegExp(r'\btotal\b').hasMatch(lower) &&
+          !lower.contains('subtotal') &&
+          !lower.contains('sub total');
+
+      if (isExplicitTotal || (isGenericTotal && !foundTotal)) {
+        final value = extractLastNumber(line);
+        if (value != null) {
+          // Explicit total always wins; otherwise take highest
+          if (isExplicitTotal || value > grandTotal) {
+            grandTotal = value;
+            foundTotal = true;
+          }
+        }
+      }
     }
 
-    // Extract service charge
-    final serviceMatch = RegExp(r'(?:service[\s-]?charge|tip|gratuity)[:\s]+([^,\n]+)', caseSensitive: false)
-        .firstMatch(text);
-    if (serviceMatch != null) {
-      serviceCharge = _parseNumber(serviceMatch.group(1)!);
-    }
-
-    // Extract grand total (prefer "Total" or "Grand Total")
-    final totalMatches = RegExp(r'(?:grand[\s-]?total|total|amount[\s-]?due)[:\s]+([^,\n]+)', caseSensitive: false)
-        .allMatches(text);
-    if (totalMatches.isNotEmpty) {
-      // Use the last match (usually the grand total)
-      grandTotal = _parseNumber(totalMatches.last.group(1)!);
+    // Fallback: if still no grand total, find the largest number on a line containing any currency indicator
+    if (!foundTotal) {
+      for (final line in lines) {
+        if (RegExp(r'Rp\.?|[\$€£₹]', caseSensitive: false).hasMatch(line)) {
+          final value = extractLastNumber(line);
+          if (value != null && value > grandTotal) {
+            grandTotal = value;
+          }
+        }
+      }
     }
 
     // Calculate subtotal if not found
@@ -285,10 +350,10 @@ class FreeformParser implements ReceiptParser {
       serviceCharge: serviceCharge > 0 ? serviceCharge : null,
       grandTotal: grandTotal,
       confidenceScores: {
-        'subtotal': subtotalMatch != null ? 75 : 50,
-        'tax': taxMatch != null ? 75 : 50,
-        if (serviceCharge > 0) 'serviceCharge': serviceMatch != null ? 70 : 40,
-        'grandTotal': totalMatches.isNotEmpty ? 80 : 50,
+        'subtotal': foundSubtotal ? 75 : 50,
+        'tax': foundTax ? 75 : 50,
+        if (serviceCharge > 0) 'serviceCharge': foundService ? 70 : 40,
+        'grandTotal': foundTotal ? 80 : 50,
       },
     );
   }

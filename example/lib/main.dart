@@ -33,6 +33,10 @@ class ReceiptOcrScreen extends StatefulWidget {
 
 class _ReceiptOcrScreenState extends State<ReceiptOcrScreen> {
   final ImagePicker _imagePicker = ImagePicker();
+
+  // To use real GLM-OCR, replace with:
+  //   final FlutterReceiptOcr _ocr = FlutterReceiptOcr.glm(apiKey: 'YOUR_API_KEY');
+  // Get your API key from https://z.ai/manage-apikey/apikey-list
   final FlutterReceiptOcr _ocr = FlutterReceiptOcr.mock();
 
   XFile? _selectedImage;
