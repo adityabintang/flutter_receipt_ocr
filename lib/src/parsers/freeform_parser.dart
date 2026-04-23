@@ -178,7 +178,7 @@ class FreeformParser implements ReceiptParser {
               .trim();
 
           if (itemName.isNotEmpty) {
-            final quantity = double.tryParse(matches[-2].group(0)!) ?? 1.0;
+            final quantity = matches.length >= 2 ? double.tryParse(matches[matches.length - 2].group(0)!) ?? 1.0 : 1.0;
             final price = double.tryParse(matches.last.group(0)!) ?? 0.0;
 
             items.add(ItemLine(

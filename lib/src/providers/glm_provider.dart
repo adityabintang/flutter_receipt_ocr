@@ -5,22 +5,27 @@ import 'package:http/http.dart' as http;
 import '../exceptions/ocr_exception.dart';
 import 'base_ocr_provider.dart';
 
-/// OCR provider that uses Alibaba GLM API.
+/// OCR provider that uses Zhipu AI GLM-OCR API (Layout Parsing).
+///
+/// Uses the official GLM-OCR model through the layout parsing endpoint:
+/// POST https://api.z.ai/api/paas/v4/layout_parsing
+///
+/// Get your API key at: https://z.ai/manage-apikey/apikey-list
 class GLMProvider extends BaseOcrProvider {
   final String apiKey;
   final String apiEndpoint;
 
-  /// Create a GLM provider.
+  /// Create a GLM-OCR provider.
   ///
-  /// [apiKey] - API key for GLM service
-  /// [apiEndpoint] - Optional API endpoint (defaults to Alibaba GLM endpoint)
+  /// [apiKey] - API key for GLM-OCR service from https://z.ai
+  /// [apiEndpoint] - Optional API endpoint (defaults to official Zhipu AI endpoint)
   GLMProvider({
     required this.apiKey,
-    this.apiEndpoint = 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+    this.apiEndpoint = 'https://api.z.ai/api/paas/v4/layout_parsing',
   });
 
   @override
-  String get providerName => 'glm';
+  String get providerName => 'glm-ocr';
 
   @override
   Future<String> processImage(
@@ -29,12 +34,12 @@ class GLMProvider extends BaseOcrProvider {
     String? userPrompt,
   }) async {
     try {
+      // Convert image to base64
       final base64Image = base64Encode(imageData);
-      final systemPromptValue = systemPrompt ?? getDefaultSystemPrompt();
-      final userPromptValue = userPrompt ?? getDefaultUserPrompt();
 
       final client = http.Client();
       try {
+        // Make request to GLM-OCR Layout Parsing API
         final response = await client.post(
           Uri.parse(apiEndpoint),
           headers: {
@@ -42,48 +47,34 @@ class GLMProvider extends BaseOcrProvider {
             'Content-Type': 'application/json',
           },
           body: jsonEncode({
-            'model': 'glm-4v',
-            'messages': [
-              {
-                'role': 'system',
-                'content': systemPromptValue,
-              },
-              {
-                'role': 'user',
-                'content': [
-                  {
-                    'type': 'image_url',
-                    'image_url': {
-                      'url': 'data:image/jpeg;base64,$base64Image',
-                    },
-                  },
-                  {
-                    'type': 'text',
-                    'text': userPromptValue,
-                  },
-                ],
-              },
-            ],
-            'temperature': 0.1,
-            'top_p': 0.7,
+            'model': 'glm-ocr',
+            'file': 'data:image/jpeg;base64,$base64Image',
+            'return_crop_images': false,
+            'need_layout_visualization': false,
           }),
-        ).timeout(const Duration(seconds: 30));
+        ).timeout(const Duration(seconds: 60));
 
         if (response.statusCode != 200) {
           throw InferenceException(
-            'GLM API request failed',
+            'GLM-OCR API request failed',
             response.body,
             response.statusCode,
           );
         }
 
         final jsonResponse = jsonDecode(response.body) as Map<String, dynamic>;
-        final message = (jsonResponse['choices'] as List?)?[0];
-        if (message == null) {
-          throw InferenceException('Invalid response structure from GLM API', null, response.statusCode);
+
+        // Return markdown results which contains the OCR text
+        final mdResults = jsonResponse['md_results'] as String? ?? '';
+        if (mdResults.isEmpty) {
+          throw InferenceException(
+            'No OCR results returned from GLM-OCR',
+            null,
+            response.statusCode,
+          );
         }
 
-        return message['message']['content'] as String? ?? '';
+        return mdResults;
       } finally {
         client.close();
       }
@@ -91,7 +82,7 @@ class GLMProvider extends BaseOcrProvider {
       if (e is InferenceException) {
         rethrow;
       }
-      throw InferenceException('Failed to process image with GLM', e);
+      throw InferenceException('Failed to process image with GLM-OCR', e);
     }
   }
 
@@ -101,26 +92,56 @@ class GLMProvider extends BaseOcrProvider {
     String? systemPrompt,
     String? userPrompt,
   }) async {
-    final response = await processImage(
-      imageData,
-      systemPrompt: systemPrompt,
-      userPrompt: userPrompt,
-    );
-
     try {
-      // Parse JSON from response
-      final jsonMatch = RegExp(r'\{[\s\S]*\}').firstMatch(response);
-      if (jsonMatch == null) {
-        throw ParsingException('No JSON found in GLM response', null, response);
-      }
+      // Convert image to base64
+      final base64Image = base64Encode(imageData);
 
-      final jsonStr = jsonMatch.group(0)!;
-      return jsonDecode(jsonStr) as Map<String, dynamic>;
+      final client = http.Client();
+      try {
+        // Make request with layout details enabled for structured data
+        final response = await client.post(
+          Uri.parse(apiEndpoint),
+          headers: {
+            'Authorization': 'Bearer $apiKey',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({
+            'model': 'glm-ocr',
+            'file': 'data:image/jpeg;base64,$base64Image',
+            'return_crop_images': true,
+            'need_layout_visualization': false,
+          }),
+        ).timeout(const Duration(seconds: 60));
+
+        if (response.statusCode != 200) {
+          throw InferenceException(
+            'GLM-OCR API request failed',
+            response.body,
+            response.statusCode,
+          );
+        }
+
+        final jsonResponse = jsonDecode(response.body) as Map<String, dynamic>;
+
+        // Return the full structured response with layout details
+        return {
+          'id': jsonResponse['id'],
+          'created': jsonResponse['created'],
+          'model': jsonResponse['model'],
+          'md_results': jsonResponse['md_results'],
+          'layout_details': jsonResponse['layout_details'] ?? [],
+          'data_info': jsonResponse['data_info'],
+          'usage': jsonResponse['usage'],
+          'request_id': jsonResponse['request_id'],
+        };
+      } finally {
+        client.close();
+      }
     } catch (e) {
-      if (e is ParsingException) {
+      if (e is InferenceException) {
         rethrow;
       }
-      throw ParsingException('Failed to parse GLM response as JSON', e, response);
+      throw InferenceException('Failed to process image with GLM-OCR', e);
     }
   }
 }
