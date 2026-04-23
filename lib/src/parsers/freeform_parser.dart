@@ -167,10 +167,10 @@ class FreeformParser implements ReceiptParser {
       if (line.isEmpty) continue;
 
       // Look for lines with price patterns
-      final priceMatch = RegExp(r'(\d+(?:\.\d{2})?)').findAllMatches(line);
-      if (priceMatch.length >= 2) {
+      final priceMatches = RegExp(r'(\d+(?:\.\d{2})?)').allMatches(line).toList();
+      if (priceMatches.length >= 2) {
         // Assume last two numbers are quantity and price
-        final matches = priceMatch.toList();
+        final matches = priceMatches;
         if (matches.length >= 2) {
           final itemName = line
               .replaceAll(RegExp(r'\d+(?:\.\d{2})?'), '')
