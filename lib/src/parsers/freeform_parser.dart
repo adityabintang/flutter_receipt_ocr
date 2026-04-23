@@ -231,7 +231,7 @@ class FreeformParser implements ReceiptParser {
 
     // Extract grand total (prefer "Total" or "Grand Total")
     final totalMatch = RegExp(r'(?:grand total|total|amount due)[:\s]+\$?(\d+(?:\.\d{2})?)', caseSensitive: false)
-        .findAllMatches(text);
+        .allMatches(text);
     if (totalMatch.isNotEmpty) {
       // Use the last match (usually the grand total)
       grandTotal = double.tryParse(totalMatch.last.group(1)!) ?? 0;
