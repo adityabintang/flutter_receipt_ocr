@@ -202,7 +202,6 @@ class _ReceiptOcrScreenState extends State<ReceiptOcrScreen> {
                     children: [
                       CircularProgressIndicator(
                         value: receipt.overallConfidence / 100,
-                        minRadius: 60,
                         strokeWidth: 8,
                         valueColor: AlwaysStoppedAnimation<Color>(
                           receipt.overallConfidence >= 80
